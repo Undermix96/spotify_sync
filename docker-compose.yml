@@ -21,7 +21,7 @@ services:
       - SPM_MUSIC_PATH=/music
       - SPM_PLAYLISTS_PATH=/playlists
       - SPM_DB_PATH=/app/data/spm.db
-      - SPM_LOG_LEVEL=INFO
+      - SPM_LOG_LEVEL=DEBUG
 
 volumes:
   data:
