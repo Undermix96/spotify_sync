@@ -9,6 +9,11 @@ from app.config import config
 
 logger = logging.getLogger(__name__)
 
+# Search timeouts
+_SEARCH_TIMEOUT = 35      # seconds — safety net for the entire search operation
+_SEARCH_TIMEOUT_MS = 30_000  # milliseconds sent to slskd API (searchTimeout param)
+_BATCH_POLL_INTERVAL = 1   # seconds between poll iterations
+
 
 class SlskdClient:
     def __init__(self):
@@ -45,58 +50,69 @@ class SlskdClient:
 
         Uses search_text (non-blocking) + polling + search_responses.
         Returns sorted list of FLAC files by size descending.
+        Wrapped in asyncio.wait_for to prevent hanging on unresponsive slskd.
         """
         try:
-            await self._ensure_client()
-            query = f"{artist} {title}"
-            if album:
-                query = f"{query} {album}"
-
-            # 1. Start search (non-blocking)
-            search_state = await asyncio.to_thread(
-                self._client.searches.search_text,
-                searchText=query,
-                searchTimeout=15000,
+            return await asyncio.wait_for(
+                self._search_impl(artist, title, album),
+                timeout=_SEARCH_TIMEOUT,
             )
-            search_id = search_state["id"]
-
-            # 2. Poll until search is complete
-            while True:
-                state = await asyncio.to_thread(
-                    self._client.searches.state,
-                    search_id,
-                    includeResponses=False,
-                )
-                if state["isComplete"]:
-                    break
-                await asyncio.sleep(1)
-
-            # 3. Retrieve results
-            responses = await asyncio.to_thread(
-                self._client.searches.search_responses,
-                search_id,
-            )
-
-            # 4. Filter FLAC files
-            lossless_files = []
-            for response in responses:
-                username = response.get("username", "")
-                has_free_slot = response.get("hasFreeUploadSlot", False)
-                for file_info in response.get("files", []):
-                    ext = file_info.get("extension", "").lower()
-                    if ext == "flac":
-                        lossless_files.append({
-                            "filename": file_info.get("filename", ""),
-                            "size": file_info.get("size", 0),
-                            "user": username,
-                            "bitrate": file_info.get("bitRate", 0),
-                            "has_free_slot": has_free_slot,
-                        })
-
-            return sorted(lossless_files, key=lambda x: x.get("size", 0), reverse=True)
+        except asyncio.TimeoutError:
+            logger.warning("slskd search timed out after %ss for %s - %s", _SEARCH_TIMEOUT, artist, title)
+            return []
         except Exception as e:
             logger.error("slskd search error for %s - %s: %s", artist, title, e)
             return []
+
+    async def _search_impl(self, artist: str, title: str, album: Optional[str] = None) -> list[dict]:
+        """Internal search implementation (no outer timeout wrapper)."""
+        await self._ensure_client()
+        query = f"{artist} {title}"
+        if album:
+            query = f"{query} {album}"
+
+        # 1. Start search (non-blocking)
+        search_state = await asyncio.to_thread(
+            self._client.searches.search_text,
+            searchText=query,
+            searchTimeout=_SEARCH_TIMEOUT_MS,
+        )
+        search_id = search_state["id"]
+
+        # 2. Poll until search is complete
+        while True:
+            state = await asyncio.to_thread(
+                self._client.searches.state,
+                search_id,
+                includeResponses=False,
+            )
+            if state["isComplete"]:
+                break
+            await asyncio.sleep(_BATCH_POLL_INTERVAL)
+
+        # 3. Retrieve results
+        responses = await asyncio.to_thread(
+            self._client.searches.search_responses,
+            search_id,
+        )
+
+        # 4. Filter FLAC files
+        lossless_files = []
+        for response in responses:
+            username = response.get("username", "")
+            has_free_slot = response.get("hasFreeUploadSlot", False)
+            for file_info in response.get("files", []):
+                ext = file_info.get("extension", "").lower()
+                if ext == "flac":
+                    lossless_files.append({
+                        "filename": file_info.get("filename", ""),
+                        "size": file_info.get("size", 0),
+                        "user": username,
+                        "bitrate": file_info.get("bitRate", 0),
+                        "has_free_slot": has_free_slot,
+                    })
+
+        return sorted(lossless_files, key=lambda x: x.get("size", 0), reverse=True)
 
     async def download(self, username: str, filename: str) -> Optional[str]:
         """Request a download from slskd.

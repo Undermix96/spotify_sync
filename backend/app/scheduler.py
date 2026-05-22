@@ -1,4 +1,5 @@
 """APScheduler task scheduler for periodic operations."""
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -61,12 +62,21 @@ async def scan_disk_job():
         logger.info("Scheduler: scan_disk completed: %s", stats)
 
 
+_ORCHESTRATION_TIMEOUT = 600  # seconds — safety net for the entire search_missing job
+
+
 async def search_missing_job():
     logger.info("Scheduler: search_missing started")
-    async with async_session() as db:
-        from app.services.searcher import search_missing_tracks
-        stats = await search_missing_tracks(db)
-        logger.info("Scheduler: search_missing completed: %s", stats)
+    try:
+        async with async_session() as db:
+            from app.services.searcher import search_missing_tracks
+            stats = await asyncio.wait_for(
+                search_missing_tracks(db),
+                timeout=_ORCHESTRATION_TIMEOUT,
+            )
+            logger.info("Scheduler: search_missing completed: %s", stats)
+    except asyncio.TimeoutError:
+        logger.error("Scheduler: search_missing timed out after %ss", _ORCHESTRATION_TIMEOUT)
 
 
 async def monitor_downloads_job():
