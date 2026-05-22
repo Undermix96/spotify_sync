@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Container, Title, Text, TextInput, PasswordInput, Paper, Button,
-  Group, NumberInput, Select, Divider, Loader, Alert,
+  Group, NumberInput, Select, Divider, Loader, Alert, Box, Stack,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconX } from '@tabler/icons-react';
@@ -14,6 +14,29 @@ export default function SettingsPage() {
   const [testingSlskd, setTestingSlskd] = useState(false);
   const [testingProwlarr, setTestingProwlarr] = useState(false);
   const [testingQbit, setTestingQbit] = useState(false);
+  const [triggering, setTriggering] = useState<Record<string, boolean>>({});
+
+  const handleTrigger = async (jobId: string) => {
+    setTriggering((prev) => ({ ...prev, [jobId]: true }));
+    try {
+      const result = await settingsApi.triggerJob(jobId);
+      notifications.show({
+        title: result.success ? 'Completed' : 'Failed',
+        message: result.message,
+        color: result.success ? 'green' : 'red',
+        icon: result.success ? <IconCheck size={18} /> : <IconX size={18} />,
+      });
+    } catch (e: any) {
+      notifications.show({
+        title: 'Error',
+        message: e.message || 'Failed to trigger job',
+        color: 'red',
+        icon: <IconX size={18} />,
+      });
+    } finally {
+      setTriggering((prev) => ({ ...prev, [jobId]: false }));
+    }
+  };
 
   useEffect(() => {
     if (settings) {
@@ -153,51 +176,105 @@ export default function SettingsPage() {
       {/* Intervals */}
       <Paper withBorder p="md" mb="lg">
         <Title order={5} mb="md">Scheduler Intervals (seconds)</Title>
-        <Group grow>
-          <NumberInput
-            label="Sync Playlists"
-            value={form.interval_sync_playlists ?? 21600}
-            onChange={(v) => setForm({ ...form, interval_sync_playlists: typeof v === 'string' ? parseInt(v) : v })}
-            min={60}
-            step={60}
-          />
-          <NumberInput
-            label="Scan Disk"
-            value={form.interval_scan_disk ?? 43200}
-            onChange={(v) => setForm({ ...form, interval_scan_disk: typeof v === 'string' ? parseInt(v) : v })}
-            min={60}
-            step={60}
-          />
-          <NumberInput
-            label="Search Missing"
-            value={form.interval_search_missing ?? 1800}
-            onChange={(v) => setForm({ ...form, interval_search_missing: typeof v === 'string' ? parseInt(v) : v })}
-            min={60}
-            step={60}
-          />
+        <Group grow align="flex-start">
+          <Box>
+            <NumberInput
+              label="Sync Playlists"
+              value={form.interval_sync_playlists ?? 21600}
+              onChange={(v) => setForm({ ...form, interval_sync_playlists: typeof v === 'string' ? parseInt(v) : v })}
+              min={60}
+              step={60}
+              mb="xs"
+            />
+            <Button variant="light" size="xs" fullWidth
+              loading={triggering['sync_playlists']}
+              onClick={() => handleTrigger('sync_playlists')}
+            >
+              Run Now
+            </Button>
+          </Box>
+          <Box>
+            <NumberInput
+              label="Scan Disk"
+              value={form.interval_scan_disk ?? 43200}
+              onChange={(v) => setForm({ ...form, interval_scan_disk: typeof v === 'string' ? parseInt(v) : v })}
+              min={60}
+              step={60}
+              mb="xs"
+            />
+            <Button variant="light" size="xs" fullWidth
+              loading={triggering['scan_disk']}
+              onClick={() => handleTrigger('scan_disk')}
+            >
+              Run Now
+            </Button>
+          </Box>
+          <Box>
+            <NumberInput
+              label="Search Missing"
+              value={form.interval_search_missing ?? 1800}
+              onChange={(v) => setForm({ ...form, interval_search_missing: typeof v === 'string' ? parseInt(v) : v })}
+              min={60}
+              step={60}
+              mb="xs"
+            />
+            <Button variant="light" size="xs" fullWidth
+              loading={triggering['search_missing']}
+              onClick={() => handleTrigger('search_missing')}
+            >
+              Run Now
+            </Button>
+          </Box>
         </Group>
-        <Group grow mt="sm">
-          <NumberInput
-            label="Monitor Downloads"
-            value={form.interval_monitor_downloads ?? 300}
-            onChange={(v) => setForm({ ...form, interval_monitor_downloads: typeof v === 'string' ? parseInt(v) : v })}
-            min={10}
-            step={10}
-          />
-          <NumberInput
-            label="Build Playlists"
-            value={form.interval_build_playlists ?? 900}
-            onChange={(v) => setForm({ ...form, interval_build_playlists: typeof v === 'string' ? parseInt(v) : v })}
-            min={60}
-            step={60}
-          />
-          <NumberInput
-            label="Cleanup Queue"
-            value={form.interval_cleanup_queue ?? 3600}
-            onChange={(v) => setForm({ ...form, interval_cleanup_queue: typeof v === 'string' ? parseInt(v) : v })}
-            min={60}
-            step={60}
-          />
+        <Group grow align="flex-start" mt="md">
+          <Box>
+            <NumberInput
+              label="Monitor Downloads"
+              value={form.interval_monitor_downloads ?? 300}
+              onChange={(v) => setForm({ ...form, interval_monitor_downloads: typeof v === 'string' ? parseInt(v) : v })}
+              min={10}
+              step={10}
+              mb="xs"
+            />
+            <Button variant="light" size="xs" fullWidth
+              loading={triggering['monitor_downloads']}
+              onClick={() => handleTrigger('monitor_downloads')}
+            >
+              Run Now
+            </Button>
+          </Box>
+          <Box>
+            <NumberInput
+              label="Build Playlists"
+              value={form.interval_build_playlists ?? 900}
+              onChange={(v) => setForm({ ...form, interval_build_playlists: typeof v === 'string' ? parseInt(v) : v })}
+              min={60}
+              step={60}
+              mb="xs"
+            />
+            <Button variant="light" size="xs" fullWidth
+              loading={triggering['build_playlists']}
+              onClick={() => handleTrigger('build_playlists')}
+            >
+              Run Now
+            </Button>
+          </Box>
+          <Box>
+            <NumberInput
+              label="Cleanup Queue"
+              value={form.interval_cleanup_queue ?? 3600}
+              onChange={(v) => setForm({ ...form, interval_cleanup_queue: typeof v === 'string' ? parseInt(v) : v })}
+              min={60}
+              step={60}
+              mb="xs"
+            />
+            <Button variant="light" size="xs" fullWidth
+              loading={triggering['cleanup_queue']}
+              onClick={() => handleTrigger('cleanup_queue')}
+            >
+              Run Now
+            </Button>
+          </Box>
         </Group>
       </Paper>
 

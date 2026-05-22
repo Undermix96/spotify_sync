@@ -42,6 +42,7 @@ export const settingsApi = {
   testSlskd: () => api.post<ConnectionTestResult>('/settings/test-slskd'),
   testProwlarr: () => api.post<ConnectionTestResult>('/settings/test-prowlarr'),
   testQbittorrent: () => api.post<ConnectionTestResult>('/settings/test-qbittorrent'),
+  triggerJob: (jobId: string) => api.post<ConnectionTestResult>(`/settings/trigger/${jobId}`),
 };
 
 export const statsApi = {

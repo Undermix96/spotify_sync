@@ -10,8 +10,27 @@ from app.schemas.settings import SettingUpdate, SettingsResponse, ConnectionTest
 from app.services.slskd import slskd_client
 from app.services.prowlarr import prowlarr_client
 from app.services.qbittorrent import qbittorrent_client
+from app.scheduler import (
+    sync_playlists_job,
+    scan_disk_job,
+    search_missing_job,
+    monitor_downloads_job,
+    build_playlists_job,
+    cleanup_queue_job,
+    get_interval,
+    reschedule_job,
+)
 
 logger = logging.getLogger(__name__)
+
+JOB_FUNCTIONS = {
+    "sync_playlists": sync_playlists_job,
+    "scan_disk": scan_disk_job,
+    "search_missing": search_missing_job,
+    "monitor_downloads": monitor_downloads_job,
+    "build_playlists": build_playlists_job,
+    "cleanup_queue": cleanup_queue_job,
+}
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 DEFAULT_SETTINGS = {
@@ -94,6 +113,20 @@ async def test_prowlarr(db: AsyncSession = Depends(get_db)):
         prowlarr_client.api_key = key
     success, message = await prowlarr_client.test_connection()
     return ConnectionTestResponse(success=success, message=message)
+
+
+@router.post("/trigger/{job_id}", response_model=ConnectionTestResponse)
+async def trigger_job(job_id: str, db: AsyncSession = Depends(get_db)):
+    if job_id not in JOB_FUNCTIONS:
+        return ConnectionTestResponse(success=False, message=f"Unknown job: {job_id}")
+    try:
+        await JOB_FUNCTIONS[job_id]()
+        interval = await get_interval(db, job_id)
+        await reschedule_job(job_id, interval)
+        return ConnectionTestResponse(success=True, message=f"Job triggered: {job_id}")
+    except Exception as e:
+        logger.error("Error triggering job %s: %s", job_id, e)
+        return ConnectionTestResponse(success=False, message=str(e))
 
 
 @router.post("/test-qbittorrent", response_model=ConnectionTestResponse)
