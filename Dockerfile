@@ -1,3 +1,15 @@
+# Stage 1: Build frontend
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /build/frontend
+
+COPY frontend/package.json ./
+RUN yarn install
+
+COPY frontend/ .
+RUN yarn build
+
+# Stage 2: Build backend + serve static
 FROM python:3.12-slim
 
 LABEL org.opencontainers.image.title="Spotify Sync"
@@ -26,7 +38,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 
-COPY frontend/dist /app/static
+COPY --from=frontend-builder /build/frontend/dist /app/static
 
 RUN mkdir -p /music /playlists /app/data
 

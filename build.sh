@@ -4,12 +4,6 @@ set -euo pipefail
 IMAGE="undermix/spotify_sync"
 TAG="${1:-latest}"
 
-echo "🔨 Building frontend..."
-cd frontend
-yarn install --frozen-lockfile
-yarn build
-cd ..
-
 echo "🐳 Building Docker image: ${IMAGE}:${TAG}"
 docker build \
   --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
