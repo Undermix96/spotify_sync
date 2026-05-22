@@ -1,26 +1,27 @@
-version: "3.8"
-
 services:
   spotify-sync:
-    image: undermix/spotify_sync:latest
     container_name: spotify-sync
+    image: undermix/spotify_sync:latest
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8201:8000"
     volumes:
-      - /path/to/data/music:/music
-      - /path/to/data/playlists:/playlists
-      - /path/to/data/db:/app/data
+      - /mnt/wd-14tb/Spotify/music:/music
+      - /mnt/wd-14tb/Spotify/playlist:/playlists
+      - data:/app/data
     environment:
       - TZ=Europe/Rome
-      - SPM_SLSKD_URL=http://192.168.1.100:5030
-      - SPM_SLSKD_API_KEY=
-      - SPM_PROWLARR_URL=http://192.168.1.100:9696
-      - SPM_PROWLARR_API_KEY=
-      - SPM_QBITTORRENT_URL=http://192.168.1.100:8080
-      - SPM_QBITTORRENT_USERNAME=admin
-      - SPM_QBITTORRENT_PASSWORD=adminadmin
+      - SPM_SLSKD_URL=http://192.168.1.110:5030
+      - SPM_SLSKD_API_KEY=${SLSKD_API_KEY}
+      - SPM_PROWLARR_URL=http://192.168.1.110:9696
+      - SPM_PROWLARR_API_KEY=${PROWLARR_API_KEY}
+      - SPM_QBITTORRENT_URL=http://192.168.1.110:30007
+      - SPM_QBITTORRENT_USERNAME=${QBITTORRENT_USER}
+      - SPM_QBITTORRENT_PASSWORD=${QBITTORRENT_PASSWORD}
       - SPM_MUSIC_PATH=/music
       - SPM_PLAYLISTS_PATH=/playlists
       - SPM_DB_PATH=/app/data/spm.db
       - SPM_LOG_LEVEL=INFO
-    restart: unless-stopped
+
+volumes:
+  data:
