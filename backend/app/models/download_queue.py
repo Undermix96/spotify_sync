@@ -1,10 +1,14 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, UniqueConstraint
 from app.database import Base
 
 
 class DownloadQueue(Base):
     __tablename__ = "download_queue"
+
+    __table_args__ = (
+        UniqueConstraint("playlist_track_id", name="uq_download_playlist_track"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     playlist_track_id = Column(Integer, ForeignKey("playlist_tracks.id", ondelete="SET NULL"), nullable=True)

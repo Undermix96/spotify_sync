@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 SPOTIFY_EMBED_URL = "https://open.spotify.com/embed/playlist/{playlist_id}"
 SPOTIFY_API_URL = "https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
+MAX_PAGES = 100
 
 
 def extract_playlist_id(url: str) -> Optional[str]:
@@ -70,10 +71,13 @@ async def fetch_playlist_tracks(playlist_id: str) -> list[dict]:
     tracks = []
     offset = 0
     limit = 100
+    page_count = 0
+    unplayable_count = 0
 
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            while True:
+            while page_count < MAX_PAGES:
+                page_count += 1
                 resp = await client.get(
                     SPOTIFY_API_URL.format(playlist_id=playlist_id),
                     params={"offset": offset, "limit": limit, "market": "from_token"},
@@ -97,6 +101,10 @@ async def fetch_playlist_tracks(playlist_id: str) -> list[dict]:
                     if not track_obj:
                         continue
 
+                    is_playable = track_obj.get("is_playable", False)
+                    if not is_playable:
+                        unplayable_count += 1
+
                     track = {
                         "spotify_track_id": track_obj.get("id", ""),
                         "title": track_obj.get("name", "Unknown"),
@@ -105,7 +113,7 @@ async def fetch_playlist_tracks(playlist_id: str) -> list[dict]:
                         "duration_ms": track_obj.get("duration_ms"),
                         "position": offset + len(tracks),
                         "added_at_spotify": item.get("added_at"),
-                        "is_available": track_obj.get("is_playable", True) and not track_obj.get("is_local", False),
+                        "is_available": is_playable and not track_obj.get("is_local", False),
                     }
                     tracks.append(track)
 
@@ -113,8 +121,14 @@ async def fetch_playlist_tracks(playlist_id: str) -> list[dict]:
                 if offset >= data.get("total", 0):
                     break
 
+            if page_count >= MAX_PAGES:
+                logger.warning("Pagination limit reached for playlist %s (page_count=%d)", playlist_id, page_count)
+
     except Exception as e:
         logger.error("Error fetching tracks for playlist %s: %s", playlist_id, e)
+
+    if unplayable_count > 0:
+        logger.info("Excluded %d unplayable tracks from playlist %s", unplayable_count, playlist_id)
 
     return tracks
 

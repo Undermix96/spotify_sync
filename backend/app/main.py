@@ -1,5 +1,6 @@
 """FastAPI application entrypoint."""
 import logging
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -22,13 +23,27 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan: startup/shutdown."""
     logger.info("Starting Spotify Sync...")
-    await init_db()
-    logger.info("Database initialized")
-    await setup_scheduler()
-    logger.info("Scheduler started")
+    try:
+        await init_db()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.exception("Failed to initialize database: %s", e)
+        sys.exit(1)
+
+    try:
+        await setup_scheduler()
+        logger.info("Scheduler started")
+    except Exception as e:
+        logger.exception("Failed to setup scheduler: %s", e)
+        sys.exit(1)
+
     yield
-    await stop_scheduler()
-    logger.info("Spotify Sync shutdown complete")
+
+    try:
+        await stop_scheduler()
+        logger.info("Spotify Sync shutdown complete")
+    except Exception as e:
+        logger.exception("Error during scheduler shutdown: %s", e)
 
 
 app = FastAPI(
