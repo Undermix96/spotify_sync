@@ -20,6 +20,21 @@ _search_lock = asyncio.Lock()
 _BATCH_SIZE = 5
 
 
+async def _upsert_download_entry(db: AsyncSession, track_id: int, **kwargs) -> DownloadQueue:
+    """Create or update a DownloadQueue entry for the given track_id."""
+    existing = await db.execute(
+        select(DownloadQueue).where(DownloadQueue.playlist_track_id == track_id)
+    )
+    entry = existing.scalar_one_or_none()
+    if entry:
+        for key, value in kwargs.items():
+            setattr(entry, key, value)
+        db.add(entry)
+    else:
+        entry = DownloadQueue(playlist_track_id=track_id, **kwargs)
+    return entry
+
+
 async def search_missing_tracks(db: AsyncSession) -> dict:
     """Find tracks not yet downloaded and create download queue entries.
     Priority: slskd → Prowlarr+qBittorrent.
@@ -45,8 +60,13 @@ async def search_missing_tracks(db: AsyncSession) -> dict:
         )
         tracks = result.scalars().all()
 
-        # Check if already in download_queue
-        existing_queue = await db.execute(select(DownloadQueue.playlist_track_id))
+        # Check if already in download_queue with an active status
+        # Exclude 'not_found' so those tracks can be retried
+        existing_queue = await db.execute(
+            select(DownloadQueue.playlist_track_id).where(
+                DownloadQueue.status.in_(["pending", "queued", "downloading"])
+            )
+        )
         queued_ids = {row[0] for row in existing_queue.fetchall() if row[0]}
 
         # Check local_tracks match (simple fuzzy by normalized artist+title)
@@ -61,7 +81,7 @@ async def search_missing_tracks(db: AsyncSession) -> dict:
         for i in range(0, len(tracks), _BATCH_SIZE):
             batch = tracks[i:i + _BATCH_SIZE]
             results = await asyncio.gather(
-                *[_search_single_track(t, queued_ids, local_pairs) for t in batch]
+                *[_search_single_track(t, queued_ids, local_pairs, db) for t in batch]
             )
 
             for r in results:
@@ -76,14 +96,14 @@ async def search_missing_tracks(db: AsyncSession) -> dict:
         return stats
 
 
-async def _search_single_track(track: PlaylistTrack, queued_ids: set, local_pairs: set) -> dict:
+async def _search_single_track(track: PlaylistTrack, queued_ids: set, local_pairs: set, db: AsyncSession) -> dict:
     """Search for a single track: slskd → Prowlarr fallback.
 
     Returns a dict with:
       - entry: DownloadQueue model instance (or None if skipped)
       - status: key to increment in stats
     """
-    # Skip if already in download_queue
+    # Skip if already in download_queue (with active status)
     if track.id in queued_ids:
         return {"entry": None, "status": "skipped_existing"}
 
@@ -101,8 +121,8 @@ async def _search_single_track(track: PlaylistTrack, queued_ids: set, local_pair
             best.get("filename", ""),
         )
         if download_id:
-            entry = DownloadQueue(
-                playlist_track_id=track.id,
+            entry = await _upsert_download_entry(
+                db, track.id,
                 source="slskd",
                 status="queued",
                 external_id=str(download_id),
@@ -117,8 +137,8 @@ async def _search_single_track(track: PlaylistTrack, queued_ids: set, local_pair
         if download_url:
             torrent_hash = await qbittorrent_client.add_magnet(download_url, category="music")
             if torrent_hash:
-                entry = DownloadQueue(
-                    playlist_track_id=track.id,
+                entry = await _upsert_download_entry(
+                    db, track.id,
                     source="torrent",
                     status="downloading",
                     external_id=torrent_hash,
@@ -126,8 +146,8 @@ async def _search_single_track(track: PlaylistTrack, queued_ids: set, local_pair
                 return {"entry": entry, "status": "torrent_found"}
 
     # Step 3: Not found
-    entry = DownloadQueue(
-        playlist_track_id=track.id,
+    entry = await _upsert_download_entry(
+        db, track.id,
         source=None,
         status="not_found",
         error_message="No lossless source found on slskd or Prowlarr",
