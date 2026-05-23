@@ -1,6 +1,7 @@
 """slskd API wrapper using slskd-api package."""
 import asyncio
 import logging
+import random
 from typing import Optional
 
 import slskd_api
@@ -13,6 +14,15 @@ logger = logging.getLogger(__name__)
 _SEARCH_TIMEOUT = 35      # seconds — safety net for the entire search operation
 _SEARCH_TIMEOUT_MS = 30_000  # milliseconds sent to slskd API (searchTimeout param)
 _BATCH_POLL_INTERVAL = 1   # seconds between poll iterations
+
+# Retry settings for HTTP 429 rate limiting
+_MAX_RETRIES = 3
+_RETRY_BACKOFF_BASE = 5   # seconds — first retry wait
+_RETRY_MAX_DELAY = 20     # seconds — cap for exponential backoff
+_RETRY_JITTER_MAX = 3     # seconds — random jitter added to backoff
+
+# Stagger range for parallel searches
+_STAGGER_MAX = 3.0        # seconds — max random delay before starting a search
 
 
 class SlskdClient:
@@ -51,22 +61,55 @@ class SlskdClient:
         Uses search_text (non-blocking) + polling + search_responses.
         Returns sorted list of FLAC files by size descending.
         Wrapped in asyncio.wait_for to prevent hanging on unresponsive slskd.
+        Automatically retries up to _MAX_RETRIES times on HTTP 429 (rate limiting)
+        with exponential backoff + jitter.
         """
-        try:
-            return await asyncio.wait_for(
-                self._search_impl(artist, title, album),
-                timeout=_SEARCH_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            logger.warning("slskd search timed out after %ss for %s - %s", _SEARCH_TIMEOUT, artist, title)
-            return []
-        except Exception as e:
-            logger.error("slskd search error for %s - %s: %s", artist, title, e)
-            return []
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                return await asyncio.wait_for(
+                    self._search_impl(artist, title, album),
+                    timeout=_SEARCH_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("slskd search timed out after %ss for %s - %s", _SEARCH_TIMEOUT, artist, title)
+                return []
+            except Exception as e:
+                # Detect HTTP 429 (rate limiting) by checking the exception
+                is_429 = self._is_rate_limited(e)
+                if is_429 and attempt < _MAX_RETRIES:
+                    delay = min(
+                        _RETRY_BACKOFF_BASE * (2 ** attempt) + random.uniform(0, _RETRY_JITTER_MAX),
+                        _RETRY_MAX_DELAY,
+                    )
+                    logger.warning(
+                        "slskd rate limited (429) for %s - %s, retrying in %ds (attempt %d/%d)",
+                        artist, title, int(delay), attempt + 1, _MAX_RETRIES,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.error("slskd search error for %s - %s: %s", artist, title, e)
+                return []
+        return []
+
+    @staticmethod
+    def _is_rate_limited(exception: Exception) -> bool:
+        """Check if the exception indicates HTTP 429 rate limiting."""
+        # Check common HTTP client libraries
+        if hasattr(exception, "response") and hasattr(exception.response, "status_code"):
+            return exception.response.status_code == 429
+        # Fallback: check error string
+        exc_str = str(exception)
+        if "429" in exc_str and ("Too Many Requests" in exc_str or "Rate limit" in exc_str):
+            return True
+        return False
 
     async def _search_impl(self, artist: str, title: str, album: Optional[str] = None) -> list[dict]:
         """Internal search implementation (no outer timeout wrapper)."""
         await self._ensure_client()
+
+        # Stagger: random delay to spread out parallel requests from the same batch
+        await asyncio.sleep(random.uniform(0, _STAGGER_MAX))
+
         query = f"{artist} {title}"
         if album:
             query = f"{query} {album}"

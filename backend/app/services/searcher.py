@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 _search_lock = asyncio.Lock()
 
 # Number of parallel searches per batch
-_BATCH_SIZE = 5
+_BATCH_SIZE = 3
 
 
 async def _upsert_download_entry(db: AsyncSession, track_id: int, **kwargs) -> DownloadQueue:
