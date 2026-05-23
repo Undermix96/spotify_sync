@@ -84,13 +84,13 @@ services:
     environment:
       - TZ=Europe/Rome
       - SPM_SLSKD_URL=http://192.168.1.100:5030
-      - SPM_SLSKD_API_KEY=your-slskd-api-key
+      - SPM_SLSKD_API_KEY=your-slskd-api-key          # REQUIRED
       - SPM_PROWLARR_URL=http://192.168.1.100:9696
-      - SPM_PROWLARR_API_KEY=your-prowlarr-api-key
+      - SPM_PROWLARR_API_KEY=your-prowlarr-api-key    # REQUIRED
       - SPM_QBITTORRENT_URL=http://192.168.1.100:8080
       - SPM_QBITTORRENT_USERNAME=admin
-      - SPM_QBITTORRENT_PASSWORD=adminadmin
-      - SPM_MUSIC_PATH=/music
+      - SPM_QBITTORRENT_PASSWORD=adminadmin           # REQUIRED
+      - SPM_MUSIC_PATH=/music                         # REQUIRED
       - SPM_PLAYLISTS_PATH=/playlists
       - SPM_DB_PATH=/app/data/spm.db
     restart: unless-stopped
@@ -121,19 +121,20 @@ Open `http://your-host-ip:8000` in your browser.
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `SPM_MUSIC_PATH` | `/music` | Path to music library inside container |
-| `SPM_PLAYLISTS_PATH` | `/playlists` | Path to generated playlists |
-| `SPM_DB_PATH` | `/app/data/spm.db` | SQLite database path |
-| `SPM_SLSKD_URL` | `http://slskd:5030` | slskd API base URL |
-| `SPM_SLSKD_API_KEY` | — | slskd API key |
-| `SPM_PROWLARR_URL` | `http://prowlarr:9696` | Prowlarr API base URL |
-| `SPM_PROWLARR_API_KEY` | — | Prowlarr API key |
-| `SPM_QBITTORRENT_URL` | `http://qbittorrent:8080` | qBittorrent Web UI URL |
-| `SPM_QBITTORRENT_USERNAME` | `admin` | qBittorrent username |
-| `SPM_QBITTORRENT_PASSWORD` | `adminadmin` | qBittorrent password |
-| `SPM_LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `SPM_MUSIC_PATH` | **Yes** | — | Path to music library inside container |
+| `SPM_PLAYLISTS_PATH` | No | `/playlists` | Path to generated playlists |
+| `SPM_DB_PATH` | No | `/app/data/spm.db` | SQLite database path |
+| `SPM_SLSKD_URL` | No | `http://slskd:5030` | slskd API base URL |
+| `SPM_SLSKD_API_KEY` | **Yes** | — | slskd API key |
+| `SPM_PROWLARR_URL` | No | `http://prowlarr:9696` | Prowlarr API base URL |
+| `SPM_PROWLARR_API_KEY` | **Yes** | — | Prowlarr API key |
+| `SPM_QBITTORRENT_URL` | No | `http://qbittorrent:8080` | qBittorrent Web UI URL |
+| `SPM_QBITTORRENT_USERNAME` | No | `admin` | qBittorrent username |
+| `SPM_QBITTORRENT_PASSWORD` | **Yes** | — | qBittorrent password |
+| `FORWARDED_ALLOW_IPS` | No | `172.17.0.1` | Comma-separated IPs allowed to set `X-Forwarded-*` headers (set to `*` to trust all, e.g. behind a reverse proxy) |
+| `SPM_LOG_LEVEL` | No | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 
 ### Configurable Intervals (via Settings UI)
 

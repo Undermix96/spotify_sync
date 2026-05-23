@@ -189,7 +189,7 @@ UNIQUE(playlist_id, spotify_track_id, position)
 
 | Method | Path | Description |
 |---|---|---|
-| GET | /api/health | Health check |
+| GET | /api/health | Health check (used by Docker HEALTHCHECK) |
 | GET | /api/playlists | List monitored playlists |
 | POST | /api/playlists | Add playlist (body: {url}) |
 | GET | /api/playlists/{id} | Playlist detail + tracks |
@@ -276,7 +276,7 @@ All intervals are configurable via Settings UI (APScheduler reschedules at runti
 
 ## Reverse Proxy Compatibility
 
-The FastAPI app uses `uvicorn` with `--proxy-headers` enabled (via `--forwarded-allow-ips=*`), which respects `X-Forwarded-For`, `X-Forwarded-Proto`, and `X-Forwarded-Host` headers. The backend also configures `root_path` support for sub-path proxying. No SSL termination inside the container.
+The FastAPI app uses `uvicorn` with `--proxy-headers` enabled (via `--forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-172.17.0.1}`), which respects `X-Forwarded-For`, `X-Forwarded-Proto`, and `X-Forwarded-Host` headers. The default value `172.17.0.1` is the Docker bridge gateway IP; set the `FORWARDED_ALLOW_IPS` environment variable to `*` to trust all IPs (e.g. behind a reverse proxy). The backend also configures `root_path` support for sub-path proxying. No SSL termination inside the container.
 
 ## Development Build Process
 
@@ -295,19 +295,20 @@ Alternatively, use `./build.sh [tag]`.
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| SPM_MUSIC_PATH | /music | Music library root |
-| SPM_PLAYLISTS_PATH | /playlists | M3U8 output path |
-| SPM_DB_PATH | /app/data/spm.db | SQLite file path |
-| SPM_SLSKD_URL | http://slskd:5030 | slskd API base URL |
-| SPM_SLSKD_API_KEY | — | slskd API key |
-| SPM_PROWLARR_URL | http://prowlarr:9696 | Prowlarr API base URL |
-| SPM_PROWLARR_API_KEY | — | Prowlarr API key |
-| SPM_QBITTORRENT_URL | http://qbittorrent:8080 | qBittorrent Web UI URL |
-| SPM_QBITTORRENT_USERNAME | admin | qBittorrent user |
-| SPM_QBITTORRENT_PASSWORD | adminadmin | qBittorrent pass |
-| SPM_LOG_LEVEL | INFO | DEBUG, INFO, WARNING, ERROR |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| SPM_MUSIC_PATH | **Yes** | — | Music library root |
+| SPM_PLAYLISTS_PATH | No | /playlists | M3U8 output path |
+| SPM_DB_PATH | No | /app/data/spm.db | SQLite file path |
+| SPM_SLSKD_URL | No | http://slskd:5030 | slskd API base URL |
+| SPM_SLSKD_API_KEY | **Yes** | — | slskd API key |
+| SPM_PROWLARR_URL | No | http://prowlarr:9696 | Prowlarr API base URL |
+| SPM_PROWLARR_API_KEY | **Yes** | — | Prowlarr API key |
+| SPM_QBITTORRENT_URL | No | http://qbittorrent:8080 | qBittorrent Web UI URL |
+| SPM_QBITTORRENT_USERNAME | No | admin | qBittorrent user |
+| SPM_QBITTORRENT_PASSWORD | **Yes** | — | qBittorrent pass |
+| FORWARDED_ALLOW_IPS | No | 172.17.0.1 | Comma-separated IPs allowed to set X-Forwarded-* headers |
+| SPM_LOG_LEVEL | No | INFO | DEBUG, INFO, WARNING, ERROR |
 
 ## Error Handling Strategy
 
